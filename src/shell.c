@@ -23,6 +23,7 @@ void host_command(int, char **);
 void help_command(int, char **);
 void host_command(int, char **);
 void mmtest_command(int, char **);
+void new_command(int, char **);
 void test_command(int, char **);
 void _command(int, char **);
 
@@ -35,6 +36,7 @@ cmdlist cl[]={
 	MKCL(ps, "Report a snapshot of the current processes"),
 	MKCL(host, "Run command on host"),
 	MKCL(mmtest, "heap memory allocation test"),
+  MKCL(new, "create a dummy task"),
 	MKCL(help, "help"),
 	MKCL(test, "test new function"),
 	MKCL(, ""),
