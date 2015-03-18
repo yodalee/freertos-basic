@@ -105,7 +105,6 @@ void command_prompt(void *pvParameters)
 		else
 			fio_printf(2, "\r\n\"%s\" command not found.\r\n", argv[0]);
 	}
-
 }
 
 void system_logger(void *pvParameters)
@@ -114,7 +113,10 @@ void system_logger(void *pvParameters)
     char output[512] = {0};
     char *tag = "\nName          State   Priority  Stack  Num\n*******************************************\n";
     int handle, error;
-    const portTickType xDelay = 100000 / 100;
+    portTickType xLastWakeTime = xTaskGetTickCount();
+
+    handle = host_action(SYS_SYSTEM, "mkdir -p output");
+    handle = host_action(SYS_SYSTEM, "touch output/syslog");
 
     handle = host_action(SYS_OPEN, "output/syslog", 4);
     if(handle == -1) {
@@ -141,7 +143,7 @@ void system_logger(void *pvParameters)
             return;
         }
 
-        vTaskDelay(xDelay);
+        vTaskDelayUntil( &xLastWakeTime, (3000 / portTICK_RATE_MS));
     }
     
     host_action(SYS_CLOSE, handle);
@@ -171,12 +173,10 @@ int main()
 	            (signed portCHAR *) "CLI",
 	            512 /* stack size */, NULL, tskIDLE_PRIORITY + 2, NULL);
 
-#if 0
 	/* Create a task to record system log. */
 	xTaskCreate(system_logger,
 	            (signed portCHAR *) "Logger",
-	            1024 /* stack size */, NULL, tskIDLE_PRIORITY + 1, NULL);
-#endif
+	            1024 /* stack size */, NULL, tskIDLE_PRIORITY + 3, NULL);
 
 	/* Start running the tasks. */
 	vTaskStartScheduler();
