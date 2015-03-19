@@ -8,12 +8,15 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "host.h"
+#include "queue.h"
 
 typedef struct {
 	const char *name;
 	cmdfunc *fptr;
 	const char *desc;
 } cmdlist;
+
+extern xQueueHandle xQueue;
 
 void ls_command(int, char **);
 void man_command(int, char **);
@@ -163,26 +166,17 @@ void help_command(int n,char *argv[]){
 }
 
 void test_command(int n, char *argv[]) {
-    int handle;
-    int error;
+  portBASE_TYPE xStatus;
+  char buffer[64] = "Test host_write function which can write data to output/syslog\n";
+  char *pc = buffer;
 
-    fio_printf(1, "\r\n");
+  fio_printf(1, "\r\n");
     
-    handle = host_action(SYS_OPEN, "output/syslog", 8);
-    if(handle == -1) {
-        fio_printf(1, "Open file error!\n\r");
-        return;
-    }
-
-    char *buffer = "Test host_write function which can write data to output/syslog\n";
-    error = host_action(SYS_WRITE, handle, (void *)buffer, strlen(buffer));
-    if(error != 0) {
-        fio_printf(1, "Write file error! Remain %d bytes didn't write in the file.\n\r", error);
-        host_action(SYS_CLOSE, handle);
-        return;
-    }
-
-    host_action(SYS_CLOSE, handle);
+  xStatus = xQueueSendToBack( xQueue, &pc, 0);
+  if (xStatus != pdPASS) {
+    fio_printf(1, "Write file error! \n\r");
+    return;
+  }
 }
 
 void _command(int n, char *argv[]){
