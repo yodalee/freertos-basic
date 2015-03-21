@@ -28,6 +28,8 @@ volatile xSemaphoreHandle serial_tx_wait_sem = NULL;
 /* Add for serial input */
 volatile xQueueHandle serial_rx_queue = NULL;
 
+xQueueHandle xQueue = NULL;
+
 /* IRQ handler to handle USART2 interruptss (both transmit and receive
  * interrupts). */
 void USART2_IRQHandler()
@@ -105,46 +107,71 @@ void command_prompt(void *pvParameters)
 		else
 			fio_printf(2, "\r\n\"%s\" command not found.\r\n", argv[0]);
 	}
+}
 
+void system_monitor(void *pvParameters)
+{
+  signed char buf[128];
+  char output[512] = {0};
+  char *pc = output;
+  char *tag = "\nName          State   Priority  Stack  Num\n*******************************************\n";
+  portBASE_TYPE xStatus;
+
+  portTickType xLastWakeTime = xTaskGetTickCount();
+  int period = (int)pvParameters;
+
+  while(1) {
+    //Print ps message;
+    memcpy(output, tag, strlen(tag));
+    xStatus = xQueueSendToFront( xQueue, &pc, 0);
+    if (xStatus != pdPASS) {
+      fio_printf(1, "Write file error! \n\r");
+      return;
+    }
+
+    vTaskList(buf);
+
+    memcpy(output, (char *)(buf + 2), strlen((char *)buf) - 2);
+
+    xStatus = xQueueSendToFront( xQueue, &pc, 0);
+    if (xStatus != pdPASS) {
+      fio_printf(1, "Write file error! \n\r");
+      return;
+    }
+    vTaskDelayUntil( &xLastWakeTime, ( period / portTICK_RATE_MS));
+  }
 }
 
 void system_logger(void *pvParameters)
 {
-    signed char buf[128];
-    char output[512] = {0};
-    char *tag = "\nName          State   Priority  Stack  Num\n*******************************************\n";
-    int handle, error;
-    const portTickType xDelay = 100000 / 100;
+  portBASE_TYPE xStatus;
+  int handle, error;
+  char *msg;
+  const portTickType xTicksToWait = 100 / portTICK_RATE_MS;
+  
+  handle = host_action(SYS_SYSTEM, "mkdir -p output");
+  handle = host_action(SYS_SYSTEM, "touch output/syslog");
 
-    handle = host_action(SYS_OPEN, "output/syslog", 4);
-    if(handle == -1) {
-        fio_printf(1, "Open file error!\n");
-        return;
+  handle = host_action(SYS_OPEN, "output/syslog", 4);
+  if(handle == -1) {
+    fio_printf(1, "Open file error!\n");
+    return;
+  }
+
+  while(1) {
+    //Print data in queue;
+    xStatus = xQueueReceive( xQueue, &msg, xTicksToWait );
+    if (xStatus == pdPASS) {
+      error = host_action(SYS_WRITE, handle, msg, strlen(msg));
+      if (error != 0) {
+        fio_printf(1, "Write file error! Remain %d bytes didn't write in the file.\n\r", error);
+      }
     }
 
-    while(1) {
-        memcpy(output, tag, strlen(tag));
-        error = host_action(SYS_WRITE, handle, (void *)output, strlen(output));
-        if(error != 0) {
-            fio_printf(1, "Write file error! Remain %d bytes didn't write in the file.\n\r", error);
-            host_action(SYS_CLOSE, handle);
-            return;
-        }
-        vTaskList(buf);
-
-        memcpy(output, (char *)(buf + 2), strlen((char *)buf) - 2);
-
-        error = host_action(SYS_WRITE, handle, (void *)buf, strlen((char *)buf));
-        if(error != 0) {
-            fio_printf(1, "Write file error! Remain %d bytes didn't write in the file.\n\r", error);
-            host_action(SYS_CLOSE, handle);
-            return;
-        }
-
-        vTaskDelay(xDelay);
-    }
-    
-    host_action(SYS_CLOSE, handle);
+    taskYIELD();
+  }
+  
+  host_action(SYS_CLOSE, handle);
 }
 
 int main()
@@ -166,18 +193,23 @@ int main()
 	serial_rx_queue = xQueueCreate(1, sizeof(char));
 
     register_devfs();
+
+  /* Create xQueue for system_logger message send/recv */
+  xQueue = xQueueCreate(2, sizeof(char *));
 	/* Create a task to output text read from romfs. */
 	xTaskCreate(command_prompt,
 	            (signed portCHAR *) "CLI",
 	            512 /* stack size */, NULL, tskIDLE_PRIORITY + 2, NULL);
 
-#if 0
 	/* Create a task to record system log. */
 	xTaskCreate(system_logger,
 	            (signed portCHAR *) "Logger",
-	            1024 /* stack size */, NULL, tskIDLE_PRIORITY + 1, NULL);
-#endif
+	            128 /* stack size */, NULL, tskIDLE_PRIORITY + 3, NULL);
 
+  /* Create a task to monitor system */
+  xTaskCreate(system_monitor, 
+              (signed portCHAR *) "Monitor",
+              1024 /* stack size */, (void *)3000, tskIDLE_PRIORITY + 2, NULL);
 	/* Start running the tasks. */
 	vTaskStartScheduler();
 
