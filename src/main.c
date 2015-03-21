@@ -89,24 +89,32 @@ char recv_byte()
 }
 void command_prompt(void *pvParameters)
 {
-	char buf[128];
-	char *argv[20];
-    char hint[] = USER_NAME "@" USER_NAME "-STM32:~$ ";
+  char buf[128];
+  char *argv[20];
+  char hint[] = USER_NAME "@" USER_NAME "-STM32:~$ ";
 
-	fio_printf(1, "\rWelcome to FreeRTOS Shell\r\n");
-	while(1){
-                fio_printf(1, "%s", hint);
-		fio_read(0, buf, 127);
-	
-		int n=parse_command(buf, argv);
+  fio_printf(1, "\rWelcome to FreeRTOS Shell\r\n");
+  while(1){
+    fio_printf(1, "%s", hint);
+    fio_read(0, buf, 127);
 
-		/* will return pointer to the command function */
-		cmdfunc *fptr=do_command(argv[0]);
-		if(fptr!=NULL)
-			fptr(n, argv);
-		else
-			fio_printf(2, "\r\n\"%s\" command not found.\r\n", argv[0]);
-	}
+    int n=parse_command(buf, argv);
+
+    /* will return pointer to the command function */
+    cmdfunc *fptr=do_command(argv[0]);
+
+    if (fptr == NULL) {
+      fio_printf(2, "\r\n\"%s\" command not found.\r\n", argv[0]);
+      continue;
+    }
+
+    if (strcmp(argv[n-1], "&") == 0) {
+      fio_printf(1, "Run in backgroud\r\n");
+      n--;
+    }
+
+    fptr(n, argv);
+  }
 }
 
 void system_monitor(void *pvParameters)
