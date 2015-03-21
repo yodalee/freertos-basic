@@ -87,33 +87,39 @@ char recv_byte()
 	while(!xQueueReceive(serial_rx_queue, &msg, portMAX_DELAY));
 	return msg;
 }
+
+void exec_command(void *pvParameters)
+{
+  xShellArg *arg = (xShellArg *)pvParameters;
+  arg->fptr(arg->n, arg->argv);
+}
+
 void command_prompt(void *pvParameters)
 {
   char buf[128];
-  char *argv[20];
   char hint[] = USER_NAME "@" USER_NAME "-STM32:~$ ";
+  xShellArg arg;
 
   fio_printf(1, "\rWelcome to FreeRTOS Shell\r\n");
   while(1){
     fio_printf(1, "%s", hint);
     fio_read(0, buf, 127);
 
-    int n=parse_command(buf, argv);
+    arg.n=parse_command(buf, arg.argv);
 
     /* will return pointer to the command function */
-    cmdfunc *fptr=do_command(argv[0]);
+    arg.fptr=do_command(arg.argv[0]);
 
-    if (fptr == NULL) {
-      fio_printf(2, "\r\n\"%s\" command not found.\r\n", argv[0]);
+    if (arg.fptr == NULL) {
+      fio_printf(2, "\r\n\"%s\" command not found.\r\n", arg.argv[0]);
       continue;
     }
 
-    if (strcmp(argv[n-1], "&") == 0) {
+    if (strcmp(arg.argv[arg.n-1], "&") == 0) {
       fio_printf(1, "Run in backgroud\r\n");
-      n--;
+      (arg.n)--;
     }
-
-    fptr(n, argv);
+    exec_command((void *)&arg);
   }
 }
 

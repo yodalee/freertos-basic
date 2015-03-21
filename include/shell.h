@@ -7,4 +7,10 @@ typedef void cmdfunc(int, char *[]);
 
 cmdfunc *do_command(const char *str);
 
+typedef struct argument {
+  cmdfunc *fptr;
+  int n;
+  char *argv[20];
+} xShellArg;
+
 #endif
