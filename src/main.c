@@ -28,7 +28,7 @@ volatile xSemaphoreHandle serial_tx_wait_sem = NULL;
 /* Add for serial input */
 volatile xQueueHandle serial_rx_queue = NULL;
 
-xQueueHandle xQueue = NULL;
+xQueueHandle xSyslogQueue = NULL;
 
 /* IRQ handler to handle USART2 interruptss (both transmit and receive
  * interrupts). */
@@ -90,9 +90,20 @@ char recv_byte()
 
 void exec_command(void *pvParameters)
 {
+  fio_printf(1, "\r\n");
+  xShellArg *arg = (xShellArg *)pvParameters;
   while(1) {
-    xShellArg *arg = (xShellArg *)pvParameters;
-    arg->fptr(arg->n, arg->argv);
+
+    if (strcmp(arg->argv[arg->n-1], "&") == 0) {
+      //run in background
+      (arg->n)--;
+      vTaskResume(arg->parent);
+      arg->fptr(arg->n, arg->argv);
+    } else {
+      //run in foreground
+      arg->fptr(arg->n, arg->argv);
+      vTaskResume(arg->parent);
+    }
     vTaskDelete(NULL);
   }
 }
@@ -104,8 +115,10 @@ void command_prompt(void *pvParameters)
   xShellArg arg;
 
   fio_printf(1, "\rWelcome to FreeRTOS Shell\r\n");
+
   while(1){
     fio_printf(1, "%s", hint);
+
     fio_read(0, buf, 127);
 
     arg.n=parse_command(buf, arg.argv);
@@ -117,19 +130,15 @@ void command_prompt(void *pvParameters)
       fio_printf(2, "\r\n\"%s\" command not found.\r\n", arg.argv[0]);
       continue;
     }
+    arg.parent = xTaskGetCurrentTaskHandle();
 
-    if (strcmp(arg.argv[arg.n-1], "&") == 0) {
-      //run in background
-      //fio_printf(1, "Run in backgroud\r\n");
-      (arg.n)--;
-      xTaskCreate(exec_command,
-                  (signed portCHAR *) "bg shell",
-                  512 /* stack size */, (void *)&arg,
-                  tskIDLE_PRIORITY + 2, NULL);
-    } else {
-      //run in foreground
-      arg.fptr(arg.n, arg.argv);
-    }
+    xTaskCreate(exec_command,
+                (signed portCHAR *) "bg shell",
+                512 /* stack size */, (void *)&arg,
+                tskIDLE_PRIORITY + 2, NULL);
+
+    //Suspend itself, wait child resume it
+    vTaskSuspend(NULL);
   }
 }
 
@@ -147,7 +156,7 @@ void system_monitor(void *pvParameters)
   while(1) {
     //Print ps message;
     memcpy(output, tag, strlen(tag));
-    xStatus = xQueueSendToFront( xQueue, &pc, 0);
+    xStatus = xQueueSendToFront( xSyslogQueue, &pc, 0);
     if (xStatus != pdPASS) {
       fio_printf(1, "Write file error! \n\r");
       return;
@@ -157,7 +166,7 @@ void system_monitor(void *pvParameters)
 
     memcpy(output, (char *)(buf + 2), strlen((char *)buf) - 2);
 
-    xStatus = xQueueSendToFront( xQueue, &pc, 0);
+    xStatus = xQueueSendToFront( xSyslogQueue, &pc, 0);
     if (xStatus != pdPASS) {
       fio_printf(1, "Write file error! \n\r");
       return;
@@ -184,7 +193,7 @@ void system_logger(void *pvParameters)
 
   while(1) {
     //Print data in queue;
-    xStatus = xQueueReceive( xQueue, &msg, xTicksToWait );
+    xStatus = xQueueReceive( xSyslogQueue, &msg, xTicksToWait );
     if (xStatus == pdPASS) {
       error = host_action(SYS_WRITE, handle, msg, strlen(msg));
       if (error != 0) {
@@ -218,8 +227,9 @@ int main()
 
   register_devfs();
 
-  /* Create xQueue for system_logger message send/recv */
-  xQueue = xQueueCreate(2, sizeof(char *));
+  /* Create xSyslogQueue for system_logger message send/recv */
+  xSyslogQueue = xQueueCreate(2, sizeof(char *));
+
 	/* Create a task to output text read from romfs. */
 	xTaskCreate(command_prompt,
 	            (signed portCHAR *) "CLI",
