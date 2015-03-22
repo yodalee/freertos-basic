@@ -90,8 +90,11 @@ char recv_byte()
 
 void exec_command(void *pvParameters)
 {
-  xShellArg *arg = (xShellArg *)pvParameters;
-  arg->fptr(arg->n, arg->argv);
+  while(1) {
+    xShellArg *arg = (xShellArg *)pvParameters;
+    arg->fptr(arg->n, arg->argv);
+    vTaskDelete(NULL);
+  }
 }
 
 void command_prompt(void *pvParameters)
@@ -116,10 +119,17 @@ void command_prompt(void *pvParameters)
     }
 
     if (strcmp(arg.argv[arg.n-1], "&") == 0) {
-      fio_printf(1, "Run in backgroud\r\n");
+      //run in background
+      //fio_printf(1, "Run in backgroud\r\n");
       (arg.n)--;
+      xTaskCreate(exec_command,
+                  (signed portCHAR *) "bg shell",
+                  512 /* stack size */, (void *)&arg,
+                  tskIDLE_PRIORITY + 2, NULL);
+    } else {
+      //run in foreground
+      arg.fptr(arg.n, arg.argv);
     }
-    exec_command((void *)&arg);
   }
 }
 
@@ -206,7 +216,7 @@ int main()
 	 * Reference: www.freertos.org/a00116.html */
 	serial_rx_queue = xQueueCreate(1, sizeof(char));
 
-    register_devfs();
+  register_devfs();
 
   /* Create xQueue for system_logger message send/recv */
   xQueue = xQueueCreate(2, sizeof(char *));
