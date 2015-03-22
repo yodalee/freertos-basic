@@ -16,7 +16,7 @@ typedef struct {
 	const char *desc;
 } cmdlist;
 
-extern xQueueHandle xQueue;
+extern xQueueHandle xSyslogQueue;
 
 void ls_command(int, char **);
 void man_command(int, char **);
@@ -170,21 +170,24 @@ void test_command(int n, char *argv[]) {
   char buffer[64] = "Test host_write function which can write data to output/syslog\n";
   char *pc = buffer;
 
-  fio_printf(1, "\r\n");
-    
-  xStatus = xQueueSendToBack( xQueue, &pc, 0);
+  xStatus = xQueueSendToBack( xSyslogQueue, &pc, 0);
   if (xStatus != pdPASS) {
     fio_printf(1, "Write file error! \n\r");
     return;
   }
 
   // print prime number
+  int target = 100;
   int prime[25] = {0};
   prime[0] = 2;
   int primecount = 1;
 
+  //unsigned long i;
+  //for (i = 0; i < 0x0fffffff; ++i) {
+  //}
+
   int testnum = 2, idx;
-  for (testnum = 3; testnum < 100; ++testnum) {
+  for (testnum = 3; testnum < target; ++testnum) {
     int isPrime = 1;
     for (idx = 0; idx < primecount && idx * idx < testnum; ++idx) {
       if (testnum % prime[idx] == 0) {
@@ -196,15 +199,16 @@ void test_command(int n, char *argv[]) {
       prime[primecount++] = testnum;
     }
   }
+  buffer[0] = '\0';
   for (idx = 0; idx < primecount; ++idx) {
-    fio_printf(1, "%d ", prime[idx]);
+    sprintf(buffer + strlen(buffer), "%d ", prime[idx]);
   }
-  fio_printf(1,"\r\n"); 
+  sprintf(buffer + strlen(buffer), "\r\n");
+  fio_printf(1, buffer);
 }
 
 void _command(int n, char *argv[]){
     (void)n; (void)argv;
-    fio_printf(1, "\r\n");
 }
 
 cmdfunc *do_command(const char *cmd){
