@@ -177,6 +177,29 @@ void test_command(int n, char *argv[]) {
     fio_printf(1, "Write file error! \n\r");
     return;
   }
+
+  // print prime number
+  int prime[25] = {0};
+  prime[0] = 2;
+  int primecount = 1;
+
+  int testnum = 2, idx;
+  for (testnum = 3; testnum < 100; ++testnum) {
+    int isPrime = 1;
+    for (idx = 0; idx < primecount && idx * idx < testnum; ++idx) {
+      if (testnum % prime[idx] == 0) {
+        isPrime = 0;
+        break;
+      }
+    }
+    if (isPrime) {
+      prime[primecount++] = testnum;
+    }
+  }
+  for (idx = 0; idx < primecount; ++idx) {
+    fio_printf(1, "%d ", prime[idx]);
+  }
+  fio_printf(1,"\r\n"); 
 }
 
 void _command(int n, char *argv[]){
